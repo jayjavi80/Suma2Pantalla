@@ -1150,6 +1150,7 @@
     let timeLeft = TOTAL_TIME;
     let puntos = { p1: 0, p2: 0, p3: 0, p4: 0 };
     let timer = null;
+    const pendingTimeouts = new Set();
     let gameActive = false;
     let gameStarted = false;
     let audioInitialized = false;
@@ -1222,6 +1223,15 @@
         podium: "🏆 PODIUM 🏆"
       }
     };
+
+    function scheduleGameTimeout(callback, delay) {
+      const timeoutId = window.setTimeout(() => {
+        pendingTimeouts.delete(timeoutId);
+        callback();
+      }, delay);
+      pendingTimeouts.add(timeoutId);
+      return timeoutId;
+    }
 
     function getLang() {
       return translations[currentLanguage];
@@ -1403,7 +1413,7 @@
       const wrong = root.querySelector('[data-wrong]');
       wrong.classList.remove('show');
       feedback.classList.add('show');
-      window.setTimeout(() => feedback.classList.remove('show'), 900);
+      scheduleGameTimeout(() => feedback.classList.remove('show'), 900);
     }
 
     function showWrongFlag(pid) {
@@ -1413,7 +1423,7 @@
       const wrong = root.querySelector('[data-wrong]');
       feedback.classList.remove('show');
       wrong.classList.add('show');
-      window.setTimeout(() => wrong.classList.remove('show'), 850);
+      scheduleGameTimeout(() => wrong.classList.remove('show'), 850);
     }
 
     function handleAnswer(pid, chosen, correct, btn) {
@@ -1429,12 +1439,12 @@
         btn.style.background = '#4CAF50';
         btn.style.color = 'white';
         btn.style.borderColor = '#4CAF50';
-        window.setTimeout(() => renderProblem(pid), 260);
+        scheduleGameTimeout(() => renderProblem(pid), 260);
       } else {
         showWrongFlag(pid);
         safePlay(soundWrong);
         btn.classList.add('wrong');
-        window.setTimeout(() => btn.classList.remove('wrong'), 300);
+        scheduleGameTimeout(() => btn.classList.remove('wrong'), 300);
       }
     }
 
@@ -1467,14 +1477,18 @@
         puntos: puntos[pid]
       })).sort((a, b) => b.puntos - a.puntos);
 
+      let position = 0;
       jugadores.forEach((jugador, index) => {
+        if (index === 0 || jugador.puntos !== jugadores[index - 1].puntos) {
+          position = index + 1;
+        }
         const item = document.createElement('div');
         item.className = 'ranking-item';
-        if (index === 0) item.classList.add('first');
-        else if (index === 1) item.classList.add('second');
-        else if (index === 2) item.classList.add('third');
+        if (position === 1) item.classList.add('first');
+        else if (position === 2) item.classList.add('second');
+        else if (position === 3) item.classList.add('third');
 
-        const medalla = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '⭐';
+        const medalla = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '⭐';
         item.innerHTML = `
           <div class="player-info">
             <span class="medal">${medalla}</span>
@@ -1524,7 +1538,7 @@
           countdownNumber.style.animation = 'none';
           void countdownNumber.offsetWidth;
           countdownNumber.style.animation = 'countdownPulse 0.5s ease';
-          window.setTimeout(() => {
+          scheduleGameTimeout(() => {
             startOverlay.classList.remove('show');
             countdownNumber.textContent = '3';
             actuallyStartGame();
@@ -1588,6 +1602,8 @@
     }
 
     function resetToStandby(showWinner = true) {
+      pendingTimeouts.forEach(timeoutId => window.clearTimeout(timeoutId));
+      pendingTimeouts.clear();
       if (timer) {
         window.clearInterval(timer);
         timer = null;
@@ -1654,7 +1670,9 @@
     function setupEventListeners() {
       document.getElementById('fsBtn').addEventListener('click', () => {
         if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
+          if (typeof document.documentElement.requestFullscreen === 'function') {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
         } else if (document.exitFullscreen) {
           document.exitFullscreen();
         }
